@@ -55,12 +55,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       <version>${netty-codec-http.version}</version>
     </dependency>
 
-    <dependency>
-      <groupId>org.json</groupId>
-      <artifactId>json</artifactId>
-      <version>20220320</version>
-    </dependency>
-
   </dependencies>
 
   <distributionManagement>

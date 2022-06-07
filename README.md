@@ -50,7 +50,7 @@ public class Test {
     String fileName = Base64.encodeBase64String(
       ("file.txt").getBytes(StandardCharsets.UTF_8)
     );
-    String conversationId = "52f466d1-9ad4-46fd-b441-df77429ddccd@demo.zextras.io";
+    String conversationId = "fake-conversation-id";
 
     //Upload a file on Chats
     chatsClient.uploadFile(

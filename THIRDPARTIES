@@ -7,7 +7,6 @@ Apache License 2.0 (Apache-2.0) applies to:
 
 common-io, 2002-2022, Copyright 2002-2022 The Apache Software Foundation;
 jackson-databind;
-json;
 netty;
 httpcomponents, 1999-2022, Copyright 1999-2022 The Apache Software Foundation;
 maven-compiler-plugin, 2002-2022, Copyright 1999-2021 The Apache Software Foundation;

@@ -4,13 +4,16 @@
 
 package com.zextras.carbonio.chats;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zextras.carbonio.chats.Chats.ApiPath;
 import com.zextras.carbonio.chats.Chats.ApiVersion;
 import com.zextras.carbonio.chats.Chats.Endpoints;
 import com.zextras.carbonio.chats.Chats.Parameters;
-import com.zextras.carbonio.chats.entities.FileMessageResponse;
-import com.zextras.carbonio.chats.entities.TextMessageResponse;
+import com.zextras.carbonio.chats.Chats.Timeouts;
+import com.zextras.carbonio.chats.entities.requests.SendTextMessageRequest;
+import com.zextras.carbonio.chats.entities.responses.FileMessageResponse;
+import com.zextras.carbonio.chats.entities.responses.TextMessageResponse;
 import com.zextras.carbonio.chats.exceptions.BadRequest;
 import com.zextras.carbonio.chats.exceptions.InternalServerError;
 import com.zextras.carbonio.chats.exceptions.ServiceUnavailable;
@@ -25,6 +28,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpStatus;
 import org.apache.http.ProtocolVersion;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentType;
@@ -32,7 +36,6 @@ import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
-import org.json.JSONObject;
 
 /**
  * An HTTP client that allows to execute HTTP requests to Chats on mailbox.
@@ -111,6 +114,10 @@ public class ChatsClient {
       "Content-Disposition",
       String.format("attachment; filename*= \"utf-8''%s\";", URLEncoder.encode(decodedFileName, StandardCharsets.UTF_8))
     );
+    RequestConfig reqConfig = RequestConfig.custom().setSocketTimeout(Timeouts.SEND_FILE_TIMEOUT)
+      .setConnectTimeout(Timeouts.SEND_FILE_TIMEOUT)
+      .setConnectionRequestTimeout(Timeouts.SEND_FILE_TIMEOUT).build();
+    request.setConfig(reqConfig);
 
     try {
       InputStreamEntity body = new InputStreamEntity(
@@ -163,17 +170,28 @@ public class ChatsClient {
     String textMessage
   ) {
     CloseableHttpClient httpClient = HttpClients.createDefault();
-    JSONObject jsonObject = new JSONObject();
-    jsonObject.put(Parameters.CONVERSATION_ID, conversationId);
-    jsonObject.put(Parameters.TEMPORARY_CLIENT_MESSAGE_ID, conversationId + System.currentTimeMillis());
-    jsonObject.put(Parameters.TEXT_MESSAGE, textMessage);
     HttpPost request = new HttpPost(
       chatsUrl + String.format(ApiPath.ZX_TEAM, ApiVersion.LAST) + Endpoints.SEND_TEXT_MESSAGE
     );
     request.setProtocolVersion(new ProtocolVersion("HTTP", 1, 1));
     request.addHeader("Cookie", cookie);
     request.addHeader("content-type", "application/json");
-    request.setEntity(new StringEntity(jsonObject.toString(), StandardCharsets.UTF_8));
+    try {
+      SendTextMessageRequest sendTextMessageRequest = new SendTextMessageRequest(
+        conversationId,
+        conversationId + System.currentTimeMillis(),
+        textMessage
+      );
+      request.setEntity(
+        new StringEntity(new ObjectMapper().writeValueAsString(sendTextMessageRequest), StandardCharsets.UTF_8)
+      );
+    } catch (JsonProcessingException exception) {
+      return Try.failure(new InternalServerError(exception));
+    }
+    RequestConfig reqConfig = RequestConfig.custom().setSocketTimeout(Timeouts.SEND_TEXT_MESSAGE_TIMEOUT)
+      .setConnectTimeout(Timeouts.SEND_TEXT_MESSAGE_TIMEOUT)
+      .setConnectionRequestTimeout(Timeouts.SEND_TEXT_MESSAGE_TIMEOUT).build();
+    request.setConfig(reqConfig);
 
     try {
       CloseableHttpResponse response = httpClient.execute(request);

@@ -4,6 +4,8 @@
 
 package com.zextras.carbonio.chats;
 
+import java.time.Duration;
+
 public interface Chats {
 
   interface ApiPath {
@@ -26,6 +28,11 @@ public interface Chats {
 
     String CONVERSATION_ID             = "conversation_id";
     String TEMPORARY_CLIENT_MESSAGE_ID = "temporary_client_message_id";
-    String TEXT_MESSAGE                = "text_message";
+  }
+
+  interface Timeouts {
+
+    int SEND_FILE_TIMEOUT         = (int) Duration.ofMinutes(5).toMillis();
+    int SEND_TEXT_MESSAGE_TIMEOUT = (int) Duration.ofSeconds(10).toMillis();
   }
 }
