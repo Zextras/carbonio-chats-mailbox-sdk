@@ -27,7 +27,7 @@ Official SDK for Zextras Carbonio Chats Mailbox
 <dependency>
   <groupId>com.zextras.carbonio.chats.mailbox</groupId>
   <artifactId>carbonio-chats-mailbox-sdk</artifactId>
-  <version>0.0.1</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 

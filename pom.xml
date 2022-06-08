@@ -91,6 +91,6 @@ SPDX-License-Identifier: AGPL-3.0-only
     <netty-codec-http.version>4.1.77.Final</netty-codec-http.version>
   </properties>
 
-  <version>0.0.1</version>
+  <version>0.1.0</version>
 
 </project>
