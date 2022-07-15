@@ -16,6 +16,8 @@ import com.zextras.carbonio.chats.entities.responses.FileMessageResponse;
 import com.zextras.carbonio.chats.entities.responses.TextMessageResponse;
 import com.zextras.carbonio.chats.exceptions.BadRequest;
 import com.zextras.carbonio.chats.exceptions.InternalServerError;
+import com.zextras.carbonio.chats.exceptions.NsLookupClientError;
+import com.zextras.carbonio.chats.exceptions.NsLookupServerNotFound;
 import com.zextras.carbonio.chats.exceptions.ServiceUnavailable;
 import com.zextras.carbonio.chats.exceptions.UnAuthorized;
 import io.netty.handler.codec.http.QueryStringEncoder;
@@ -24,6 +26,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Optional;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpStatus;
@@ -35,54 +39,45 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.client.HttpClientBuilder;
 
 /**
  * An HTTP client that allows to execute HTTP requests to Chats on mailbox.
  */
 public class ChatsClient {
 
-  private final String chatsUrl;
+  private final ChatsUrlProvider chatsUrlProvider;
 
-  ChatsClient(String chatsUrl) {
-    this.chatsUrl = chatsUrl;
+  private ChatsClient(ChatsUrlProvider chatsUrlProvider) {
+    this.chatsUrlProvider = chatsUrlProvider;
   }
 
-  /**
-   * Creates a new instance of the {@link ChatsClient}.
-   *
-   * @param url is a {@link String} representing the url used to communicate with the Chats on mailbox. The expected url
-   *            form must be as follows:
-   *            <code>protocol://ip:port</code> (for example <code>http://127.0.0.1:8080</code>).
-   * @return an instance of the {@link ChatsClient}.
-   */
-  public static ChatsClient atURL(String url) {
-    return new ChatsClient(url);
-  }
+  static class Builder {
 
-  /**
-   * Creates a new instance of the {@link ChatsClient}.
-   *
-   * @param protocol is a {@link String} representing the protocol used to communicate with the Chats on mailbox (for
-   *                 example: <code>http</code>).
-   * @param domain   is a {@link String} representing the domain used to communicate with Chats on mailbox (for
-   *                 example:
-   *                 <code>127.0.0.1</code>).
-   * @param port     is an {@link Integer} representing the port used to communicate with Chats on mailbox.
-   * @return an instance of the {@link ChatsClient}.
-   */
-  public static ChatsClient atURL(
-    String protocol,
-    String domain,
-    Integer port
-  ) {
-    return new ChatsClient(protocol + "://" + domain + ":" + port);
+    private final ChatsUrlProvider chatsUrlProvider;
+
+    public Builder() {
+      this.chatsUrlProvider = new ChatsUrlProvider();
+    }
+
+    public Builder withNsLookupServers(String... servers) {
+      this.chatsUrlProvider.setNsLookupServers(Arrays.asList(servers));
+      return this;
+    }
+
+    public ChatsClient build() {
+      if (this.chatsUrlProvider.getNsLookupServers().isEmpty()) {
+        throw new UnsupportedOperationException("Cannot create client without specifying lookup servers");
+      }
+      return new ChatsClient(this.chatsUrlProvider);
+    }
   }
 
   /**
    * Allows to upload a file to Chats on mailbox.
    *
    * @param cookie         is a {@link String} containing the cookie necessary for the authentication.
+   * @param accountId      is a {@link String} representing the id of the account who wants to upload the file.
    * @param conversationId is a {@link String} representing the id of the conversation to upload the file to.
    * @param fileName       is a {@link String} representing the filename of the file to upload.
    * @param mimeType       is a {@link String} representing the file mime-type.
@@ -93,16 +88,27 @@ public class ChatsClient {
    */
   public Try<FileMessageResponse> uploadFile(
     String cookie,
+    String accountId,
     String conversationId,
     String fileName,
     String mimeType,
     InputStream file,
     long fileLength
   ) {
-    CloseableHttpClient httpClient = HttpClients.createDefault();
+    Optional<String> chatsUrl;
+    try {
+      chatsUrl = chatsUrlProvider.getUrlByAccountId(accountId);
+      if (chatsUrl.isEmpty()) {
+        return Try.failure(new NsLookupServerNotFound());
+      }
+    } catch (Exception e) {
+      return Try.failure(new NsLookupClientError(e));
+    }
+
+    CloseableHttpClient httpClient = HttpClientBuilder.create().setSSLHostnameVerifier((s, sslSession) -> true).build();
 
     QueryStringEncoder queryStringEncoder = new QueryStringEncoder(
-      chatsUrl + String.format(ApiPath.ZX_TEAM, ApiVersion.LAST) + Endpoints.SEND_FILE
+      chatsUrl.get() + String.format(ApiPath.ZX_TEAM, ApiVersion.LAST) + Endpoints.SEND_FILE
     );
     queryStringEncoder.addParam(Parameters.CONVERSATION_ID, conversationId);
     queryStringEncoder.addParam(Parameters.TEMPORARY_CLIENT_MESSAGE_ID, conversationId + System.currentTimeMillis());
@@ -159,6 +165,7 @@ public class ChatsClient {
    * Allows to send a text message to Chats on mailbox.
    *
    * @param cookie         is a {@link String} containing the cookie necessary for the authentication.
+   * @param accountId      is a {@link String} representing the id of the account who wants to send the text message.
    * @param conversationId is a {@link String} representing the id of the conversation to send the text message to.
    * @param textMessage    is a {@link String} representing the text of the message to send.
    * @return a {@link Try} of {@link FileMessageResponse} representing the response of Chats on mailbox for sending text
@@ -166,12 +173,24 @@ public class ChatsClient {
    */
   public Try<TextMessageResponse> sendTextMessage(
     String cookie,
+    String accountId,
     String conversationId,
     String textMessage
   ) {
-    CloseableHttpClient httpClient = HttpClients.createDefault();
+    Optional<String> chatsUrl;
+    try {
+      chatsUrl = chatsUrlProvider.getUrlByAccountId(accountId);
+      if (chatsUrl.isEmpty()) {
+        return Try.failure(new NsLookupServerNotFound());
+      }
+    } catch (Exception e) {
+      return Try.failure(new NsLookupClientError(e));
+    }
+
+    CloseableHttpClient httpClient = HttpClientBuilder.create().setSSLHostnameVerifier((s, sslSession) -> true).build();
+
     HttpPost request = new HttpPost(
-      chatsUrl + String.format(ApiPath.ZX_TEAM, ApiVersion.LAST) + Endpoints.SEND_TEXT_MESSAGE
+      chatsUrl.get() + String.format(ApiPath.ZX_TEAM, ApiVersion.LAST) + Endpoints.SEND_TEXT_MESSAGE
     );
     request.setProtocolVersion(new ProtocolVersion("HTTP", 1, 1));
     request.addHeader("Cookie", cookie);
